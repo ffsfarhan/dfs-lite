@@ -1,41 +1,77 @@
-# DFS-Lite
+# DFS Lite 🚀
 
-Distributed File Storage System with Chunking, Replication, Integrity Verification, and Self-Healing.
+A Distributed File Storage system built with FastAPI and PostgreSQL featuring replication, integrity verification, self-healing, node management, and background repair.
 
-## Features
+---
 
-- File chunking with configurable chunk size
-- Multi-node replication
-- SHA-256 integrity verification
-- Read repair (self-healing)
-- REST API using FastAPI
-- PostgreSQL metadata storage
+## 🔥 Features Implemented
 
-## Architecture
+### 📦 1. File Upload with Chunking
+- Files are split into 1MB chunks
+- Each chunk is stored independently
+- Metadata stored in PostgreSQL
 
-- FastAPI backend
-- PostgreSQL for metadata
-- Local simulated storage nodes
-- SHA-256 hashing for integrity validation
+### 🔁 2. Replication
+- Configurable replication factor
+- Chunks are distributed across multiple storage nodes
+- Dynamic node selection from database
 
-## Endpoints
+### 🔐 3. Integrity Verification
+- SHA-256 hashing for every chunk
+- Hash stored in DB
+- Verified on every download
 
-POST /upload
-GET /download/{file_id}
-GET /files
-GET /files/{file_id}
+### 🩺 4. Self-Healing (Read Repair)
+- During download:
+  - If one replica is corrupted → system auto-recovers using healthy copy
+  - Corrupted replica is repaired automatically
+- If all replicas corrupted → file marked as DEAD
 
-## Run Locally
+### 🔄 5. Background Repair Daemon
+- Runs continuously in background
+- Periodically scans all chunks
+- Repairs corrupted replicas automatically
+- Updates file health status
 
-Create virtual environment:
+### 🟢 6. File Health States
+Files can be:
+- `HEALTHY`
+- `DEGRADED`
+- `DEAD`
 
-    python -m venv venv
-    source venv/bin/activate
+Health updates automatically during:
+- Download
+- Background repair scans
 
-Install dependencies:
+### 🗂 7. Node Management
+- Nodes stored in database
+- Nodes can be:
+  - Online
+  - Offline
+- Upload only uses online nodes
+- Simulated node failure supported
 
-    pip install -r requirements.txt
+### 📊 8. Health API
+- List files
+- File metadata endpoint
+- List nodes
+- Node status tracking
 
-Run server:
+---
 
-    uvicorn app.main:app --reload
+## 🏗 Architecture
+
+FastAPI + SQLAlchemy  
+PostgreSQL  
+Local filesystem storage nodes  
+Background repair daemon (threaded)
+
+---
+
+## 🧪 How to Run
+
+### 1. Clone
+```bash
+git clone git@github.com:ffsfarhan/dfs-lite.git
+cd dfs-lite
+
