@@ -1,12 +1,24 @@
 import os
 import hashlib
 import random
+
+from app.database import SessionLocal
+from app.models.node import Node
 from app.config import settings
 
 CHUNK_SIZE = 1024 * 1024  # 1MB per chunk
 
 
 def save_file_in_chunks(file_obj, file_id):
+
+    db = SessionLocal()
+
+    # Fetch online nodes dynamically from database
+    online_nodes = db.query(Node).filter(Node.is_online == True).all()
+
+    if len(online_nodes) < settings.REPLICATION_FACTOR:
+        db.close()
+        raise Exception("Not enough online nodes to satisfy replication factor")
 
     total_size = 0
     chunk_index = 0
@@ -22,9 +34,9 @@ def save_file_in_chunks(file_obj, file_id):
         # Calculate SHA-256 hash
         chunk_hash = hashlib.sha256(chunk_data).hexdigest()
 
-        # Select storage nodes dynamically based on replication factor
+        # Select Node OBJECTS (not ids)
         selected_nodes = random.sample(
-            settings.STORAGE_NODES,
+            online_nodes,
             settings.REPLICATION_FACTOR
         )
 
@@ -32,10 +44,12 @@ def save_file_in_chunks(file_obj, file_id):
 
         for node in selected_nodes:
 
-            os.makedirs(node, exist_ok=True)
+            node_path = node.path  # ✅ use stored DB path
+
+            os.makedirs(node_path, exist_ok=True)
 
             chunk_filename = f"{file_id}_chunk_{chunk_index}"
-            chunk_path = os.path.join(node, chunk_filename)
+            chunk_path = os.path.join(node_path, chunk_filename)
 
             with open(chunk_path, "wb") as f:
                 f.write(chunk_data)
@@ -49,6 +63,8 @@ def save_file_in_chunks(file_obj, file_id):
         })
 
         chunk_index += 1
+
+    db.close()
 
     return total_size, chunk_index, chunk_metadata
 

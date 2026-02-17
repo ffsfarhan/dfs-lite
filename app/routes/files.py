@@ -37,11 +37,12 @@ async def upload_file(
         filename=uploaded_file.filename,
         owner=owner,
         total_size=total_size,
-        total_chunks=total_chunks
+        total_chunks=total_chunks,
+        status="HEALTHY"
     )
 
     db.add(new_file)
-    db.flush()  # ensure file exists before inserting chunks
+    db.flush()
 
     for chunk in chunk_metadata:
         for path in chunk["chunk_paths"]:
@@ -60,7 +61,8 @@ async def upload_file(
         "file_id": str(file_id),
         "filename": uploaded_file.filename,
         "size": total_size,
-        "chunks": total_chunks
+        "chunks": total_chunks,
+        "status": new_file.status
     }
 
 
@@ -79,6 +81,7 @@ def list_files(db: Session = Depends(get_db)):
             "owner": file.owner,
             "size": file.total_size,
             "chunks": file.total_chunks,
+            "status": file.status,
             "created_at": file.created_at
         }
         for file in files
@@ -113,6 +116,7 @@ def get_file_metadata(file_id: str, db: Session = Depends(get_db)):
         "filename": file.filename,
         "owner": file.owner,
         "size": file.total_size,
+        "status": file.status,
         "chunks": [
             {
                 "chunk_index": c.chunk_index,
@@ -125,7 +129,7 @@ def get_file_metadata(file_id: str, db: Session = Depends(get_db)):
 
 
 # --------------------------------------------------
-# Download Endpoint (Integrity + Self-Healing)
+# Download Endpoint (Integrity + Self-Healing + Status Tracking)
 # --------------------------------------------------
 @router.get("/download/{file_id}")
 def download_file(file_id: str, db: Session = Depends(get_db)):
@@ -155,10 +159,13 @@ def download_file(file_id: str, db: Session = Depends(get_db)):
         from collections import defaultdict
 
         chunk_groups = defaultdict(list)
+        repaired_any = False
 
+        # Group replicas by chunk index
         for c in chunks:
             chunk_groups[c.chunk_index].append(c)
 
+        # Process each chunk
         for chunk_index in sorted(chunk_groups.keys()):
 
             replicas = chunk_groups[chunk_index]
@@ -181,13 +188,17 @@ def download_file(file_id: str, db: Session = Depends(get_db)):
                     valid_hash = computed_hash
                     break
 
+            # If no valid replica found → file is DEAD
             if not valid_data:
+                file_entry.status = "DEAD"
+                db.commit()
+
                 raise HTTPException(
                     status_code=500,
                     detail=f"All replicas corrupted for chunk {chunk_index}"
                 )
 
-            # ---------- Second pass: repair bad replicas ----------
+            # ---------- Second pass: repair corrupted replicas ----------
             for replica in replicas:
 
                 if not os.path.exists(replica.chunk_path):
@@ -202,7 +213,17 @@ def download_file(file_id: str, db: Session = Depends(get_db)):
                     with open(replica.chunk_path, "wb") as f:
                         f.write(valid_data)
 
+                    repaired_any = True
+
             yield valid_data
+
+        # After processing all chunks → update health state
+        if repaired_any:
+            file_entry.status = "DEGRADED"
+        else:
+            file_entry.status = "HEALTHY"
+
+        db.commit()
 
     return StreamingResponse(
         file_generator(),
