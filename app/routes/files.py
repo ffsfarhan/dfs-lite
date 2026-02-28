@@ -233,3 +233,35 @@ def download_file(file_id: str, db: Session = Depends(get_db)):
         },
     )
 
+from fastapi import HTTPException, Depends
+from sqlalchemy.orm import Session
+import os
+
+from app.database import get_db
+from app.models.file import File as FileModel
+from app.models.chunk import Chunk
+
+
+@router.delete("/files/{file_id}")
+def delete_file(file_id: str, db: Session = Depends(get_db)):
+
+    file = db.query(FileModel).filter(FileModel.id == file_id).first()
+
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Delete chunks from disk
+    chunks = db.query(Chunk).filter(Chunk.file_id == file_id).all()
+
+    for chunk in chunks:
+        if os.path.exists(chunk.chunk_path):
+            os.remove(chunk.chunk_path)
+
+    # Delete from database
+    db.query(Chunk).filter(Chunk.file_id == file_id).delete()
+    db.delete(file)
+
+    db.commit()
+
+    return {"message": "File deleted successfully"}
+

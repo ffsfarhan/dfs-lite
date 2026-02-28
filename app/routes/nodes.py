@@ -7,55 +7,43 @@ from app.models.node import Node
 router = APIRouter(prefix="/nodes", tags=["Nodes"])
 
 
-# ----------------------------------------
-# List All Nodes
-# ----------------------------------------
-@router.get("/")
+# -----------------------------------------
+# LIST NODES
+# GET /nodes
+# -----------------------------------------
+@router.get("")
 def list_nodes(db: Session = Depends(get_db)):
+    nodes = db.query(Node).order_by(Node.name).all()
 
-    nodes = db.query(Node).all()
 
     return [
         {
-            "id": node.id,
             "name": node.name,
             "path": node.path,
-            "is_online": node.is_online
+            "is_online": node.is_online,
         }
         for node in nodes
     ]
 
 
-# ----------------------------------------
-# Simulate Node Failure (OFFLINE)
-# ----------------------------------------
-@router.post("/{node_id}/offline")
-def set_node_offline(node_id: int, db: Session = Depends(get_db)):
+# -----------------------------------------
+# TOGGLE NODE ONLINE/OFFLINE
+# POST /nodes/{node_name}/toggle
+# -----------------------------------------
+@router.post("/{node_name}/toggle")
+def toggle_node(node_name: str, db: Session = Depends(get_db)):
 
-    node = db.query(Node).filter(Node.id == node_id).first()
-
-    if not node:
-        raise HTTPException(status_code=404, detail="Node not found")
-
-    node.is_online = False
-    db.commit()
-
-    return {"message": f"Node {node.name} is now OFFLINE"}
-
-
-# ----------------------------------------
-# Bring Node Back Online
-# ----------------------------------------
-@router.post("/{node_id}/online")
-def set_node_online(node_id: int, db: Session = Depends(get_db)):
-
-    node = db.query(Node).filter(Node.id == node_id).first()
+    node = db.query(Node).filter(Node.name == node_name).first()
 
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
 
-    node.is_online = True
+    node.is_online = not node.is_online
     db.commit()
 
-    return {"message": f"Node {node.name} is now ONLINE"}
+    return {
+        "message": "Node toggled successfully",
+        "node": node.name,
+        "is_online": node.is_online,
+    }
 
