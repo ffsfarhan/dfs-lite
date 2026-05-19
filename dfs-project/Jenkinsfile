@@ -1,0 +1,25 @@
+pipeline {
+    agent any
+
+    stages {
+
+        stage('Build Backend') {
+            steps {
+                sh 'docker build -t dfs-backend ./dfs-lite'
+            }
+        }
+
+        stage('Build Frontend') {
+            steps {
+                sh 'docker build -t dfs-frontend ./dfs-frontend'
+            }
+        }
+
+        stage('Start Containers') {
+            steps {
+                sh 'docker compose up -d'
+            }
+        }
+
+    }
+}
