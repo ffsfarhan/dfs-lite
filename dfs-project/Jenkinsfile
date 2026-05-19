@@ -5,19 +5,25 @@ pipeline {
 
         stage('Build Backend') {
             steps {
-                sh 'docker build -t dfs-backend ./dfs-project/dfs-lite'
+                dir('dfs-project/dfs-lite') {
+                    sh 'docker build -t dfs-backend .'
+                }
             }
         }
 
         stage('Build Frontend') {
             steps {
-                sh 'docker build -t dfs-frontend ./dfs-project/dfs-frontend'
+                dir('dfs-project/dfs-frontend') {
+                    sh 'docker build -t dfs-frontend .'
+                }
             }
         }
 
         stage('Start Containers') {
             steps {
-                sh 'docker compose -f ./dfs-project/docker-compose.yml up -d'
+                dir('dfs-project') {
+                    sh 'docker compose up -d'
+                }
             }
         }
     }
