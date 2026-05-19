@@ -1,0 +1,15 @@
+services:
+
+  backend:
+    build: ./dfs-lite
+    container_name: dfs-backend
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./dfs-frontend
+    container_name: dfs-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
