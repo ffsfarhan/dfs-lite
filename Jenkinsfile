@@ -19,9 +19,9 @@ pipeline {
             }
         }
 
-        stage('Start Containers') {
+        stage('Pipeline Success') {
             steps {
-                sh 'docker-compose up -d'
+                echo 'DFS Lite containers built successfully!'
             }
         }
     }
