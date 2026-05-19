@@ -5,6 +5,7 @@ const API = "http://127.0.0.1:8000";
 /* ---------------- BADGE ---------------- */
 
 function Badge({ status }) {
+
   let style =
     "px-3 py-1 text-xs font-semibold rounded-full border";
 
@@ -26,65 +27,154 @@ function Badge({ status }) {
 /* ---------------- MAIN ---------------- */
 
 export default function App() {
+
   const [files, setFiles] = useState([]);
   const [nodes, setNodes] = useState([]);
   const [cluster, setCluster] = useState(null);
+
   const [owner, setOwner] = useState("");
   const [file, setFile] = useState(null);
 
-  const loadAll = async () => {
-    const f = await fetch(`${API}/files`).then((r) => r.json());
-    const n = await fetch(`${API}/nodes`).then((r) => r.json());
-    const c = await fetch(`${API}/cluster/health`).then((r) => r.json());
+  /* ---------------- LOAD DATA ---------------- */
 
-    setFiles(f);
-    setNodes(n);
-    setCluster(c);
+  const loadAll = async () => {
+
+    try {
+
+      const f = await fetch(`${API}/files`).then((r) => r.json());
+      const n = await fetch(`${API}/nodes`).then((r) => r.json());
+      const c = await fetch(`${API}/cluster/health`).then((r) => r.json());
+
+      setFiles(f);
+      setNodes(n);
+      setCluster(c);
+
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   useEffect(() => {
+
     loadAll();
+
     const interval = setInterval(loadAll, 5000);
+
     return () => clearInterval(interval);
+
   }, []);
 
+  /* ---------------- UPLOAD ---------------- */
+
   const uploadFile = async () => {
-    if (!file || !owner) return alert("Owner + file required");
 
-    const form = new FormData();
-    form.append("uploaded_file", file);
+    if (!file || !owner) {
+      return alert("Owner name and file required");
+    }
 
-    await fetch(`${API}/upload?owner=${owner}`, {
-      method: "POST",
-      body: form,
-    });
+    // Prevent upload if all nodes offline
+    const onlineNodes = nodes.filter((n) => n.is_online);
 
-    setOwner("");
-    setFile(null);
-    loadAll();
+    if (onlineNodes.length === 0) {
+      return alert("Upload failed: no storage nodes online");
+    }
+
+    try {
+
+      const form = new FormData();
+
+      form.append("uploaded_file", file);
+
+      const response = await fetch(
+        `${API}/upload?owner=${owner}`,
+        {
+          method: "POST",
+          body: form,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      setOwner("");
+      setFile(null);
+
+      await loadAll();
+
+      alert("File uploaded successfully");
+
+    } catch (err) {
+
+      console.error(err);
+
+      alert("Upload failed");
+    }
   };
 
-  const deleteFile = async (id) => {
-    if (!window.confirm("Delete permanently?")) return;
+  /* ---------------- DELETE ---------------- */
 
-    await fetch(`${API}/files/${id}`, {
-      method: "DELETE",
-    });
+  const deleteFile = async (fileId) => {
 
-    loadAll();
-  };
+  try {
+
+    console.log("Deleting:", fileId);
+
+    const response = await fetch(
+      `http://127.0.0.1:8000/files/${fileId}`,
+      {
+        method: "DELETE",
+      }
+    );
+
+    console.log("Delete response:", response.status);
+
+    if (!response.ok) {
+      throw new Error("Delete failed");
+    }
+
+    // Instantly remove from UI
+    setFiles((prevFiles) =>
+      prevFiles.filter(
+        (file) => file.file_id !== fileId
+      )
+    );
+
+    alert("File deleted successfully");
+
+  } catch (error) {
+
+    console.error(error);
+
+    alert("Delete failed");
+  }
+};
+  /* ---------------- NODE TOGGLE ---------------- */
 
   const toggleNode = async (name) => {
-    await fetch(`${API}/nodes/${name}/toggle`, {
-      method: "POST",
-    });
-    loadAll();
+
+    try {
+
+      await fetch(
+        `${API}/nodes/${name}/toggle`,
+        {
+          method: "POST",
+        }
+      );
+
+      await loadAll();
+
+    } catch (err) {
+
+      console.error(err);
+    }
   };
 
   return (
+
     <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#020617] text-white">
 
-      {/* ================= HEADER ================= */}
+      {/* HEADER */}
 
       <div className="py-20 text-center border-b border-gray-800">
 
@@ -100,25 +190,34 @@ export default function App() {
 
       <div className="max-w-7xl mx-auto p-10 space-y-16">
 
-        {/* ================= CLUSTER ================= */}
+        {/* CLUSTER */}
 
         {cluster && (
+
           <div className="grid md:grid-cols-3 gap-8">
 
             <Card>
-              <p className="text-gray-400 mb-4">Cluster Status</p>
+              <p className="text-gray-400 mb-4">
+                Cluster Status
+              </p>
               <Badge status={cluster.cluster_status} />
             </Card>
 
             <Card>
-              <p className="text-gray-400 mb-4">Online Nodes</p>
+              <p className="text-gray-400 mb-4">
+                Online Nodes
+              </p>
+
               <p className="text-4xl font-bold text-green-400">
                 {cluster.nodes.online} / {cluster.nodes.total}
               </p>
             </Card>
 
             <Card>
-              <p className="text-gray-400 mb-4">Total Files</p>
+              <p className="text-gray-400 mb-4">
+                Total Files
+              </p>
+
               <p className="text-4xl font-bold text-purple-400">
                 {cluster.files.total}
               </p>
@@ -127,9 +226,13 @@ export default function App() {
           </div>
         )}
 
-        {/* ================= UPLOAD ================= */}
+        {/* UPLOAD */}
 
-        <Section title="Upload File" color="text-purple-400">
+        <Section
+          title="Upload File"
+          color="text-purple-400"
+        >
+
           <div className="flex gap-4 flex-wrap items-center">
 
             <input
@@ -152,21 +255,30 @@ export default function App() {
             </button>
 
           </div>
+
         </Section>
 
-        {/* ================= FILES ================= */}
+        {/* FILES */}
 
-        <Section title="Stored Files" color="text-cyan-400">
+        <Section
+          title="Stored Files"
+          color="text-cyan-400"
+        >
+
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-8">
 
             {files.map((f) => (
+
               <Card key={f.file_id}>
 
                 <div className="flex justify-between items-center">
+
                   <p className="font-semibold truncate">
                     {f.filename}
                   </p>
+
                   <Badge status={f.status} />
+
                 </div>
 
                 <p className="text-gray-400 text-sm">
@@ -177,7 +289,10 @@ export default function App() {
 
                   <button
                     onClick={() =>
-                      window.open(`${API}/download/${f.file_id}`, "_blank")
+                      window.open(
+                        `${API}/download/${f.file_id}`,
+                        "_blank"
+                      )
                     }
                     className="px-4 py-2 rounded-lg font-semibold bg-blue-600 hover:bg-blue-500 transition"
                   >
@@ -197,44 +312,58 @@ export default function App() {
             ))}
 
           </div>
+
         </Section>
 
-        {/* ================= NODES ================= */}
+        {/* NODES */}
 
-        <Section title="Storage Nodes" color="text-orange-400">
+        <Section
+          title="Storage Nodes"
+          color="text-orange-400"
+        >
+
           <div className="grid md:grid-cols-3 gap-8">
 
             {nodes.map((node) => (
+
               <Card key={node.name}>
 
                 <div className="flex justify-between items-center">
-                  <p className="font-bold">{node.name}</p>
-                  <Badge status={node.is_online ? "HEALTHY" : "DEAD"} />
+
+                  <p className="font-bold">
+                    {node.name}
+                  </p>
+
+                  <Badge
+                    status={
+                      node.is_online
+                        ? "HEALTHY"
+                        : "DEAD"
+                    }
+                  />
+
                 </div>
 
-                {node.is_online ? (
-                  <button
-                    onClick={() => toggleNode(node.name)}
-                    className="px-5 py-2 rounded-lg font-semibold bg-green-600 hover:bg-green-500 transition"
-                  >
-                    Toggle Online / Offline
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => toggleNode(node.name)}
-                    className="px-5 py-2 rounded-lg font-semibold bg-red-600 hover:bg-red-500 transition"
-                  >
-                    Toggle Online / Offline
-                  </button>
-                )}
+                <button
+                  onClick={() => toggleNode(node.name)}
+                  className={`px-5 py-2 rounded-lg font-semibold transition ${
+                    node.is_online
+                      ? "bg-green-600 hover:bg-green-500"
+                      : "bg-red-600 hover:bg-red-500"
+                  }`}
+                >
+                  Toggle Online / Offline
+                </button>
 
               </Card>
             ))}
 
           </div>
+
         </Section>
 
       </div>
+
     </div>
   );
 }
@@ -242,6 +371,7 @@ export default function App() {
 /* ---------------- CARD ---------------- */
 
 function Card({ children }) {
+
   return (
     <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl space-y-4">
       {children}
@@ -252,13 +382,16 @@ function Card({ children }) {
 /* ---------------- SECTION ---------------- */
 
 function Section({ title, color, children }) {
+
   return (
     <div>
+
       <h2 className={`text-3xl font-bold mb-8 ${color}`}>
         {title}
       </h2>
+
       {children}
+
     </div>
   );
 }
-

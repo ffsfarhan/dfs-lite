@@ -3,13 +3,23 @@ services:
   backend:
     build: ./dfs-lite
     container_name: dfs-backend
+
     ports:
       - "8000:8000"
+
+    volumes:
+      # Persist chunk storage
+      - ./dfs-lite/storage:/app/storage
+
+      # Persist database directory
+      - ./dfs-lite/data:/app/data
 
   frontend:
     build: ./dfs-frontend
     container_name: dfs-frontend
+
     ports:
       - "5173:5173"
+
     depends_on:
       - backend

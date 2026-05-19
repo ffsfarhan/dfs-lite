@@ -1,3 +1,4 @@
+from uuid import UUID
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -245,23 +246,47 @@ from app.models.chunk import Chunk
 @router.delete("/files/{file_id}")
 def delete_file(file_id: str, db: Session = Depends(get_db)):
 
-    file = db.query(FileModel).filter(FileModel.id == file_id).first()
+    try:
+        file_uuid = UUID(file_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file_id format"
+        )
+
+    # Find file
+    file = db.query(FileModel).filter(
+        FileModel.id == file_uuid
+    ).first()
 
     if not file:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(
+            status_code=404,
+            detail="File not found"
+        )
 
-    # Delete chunks from disk
-    chunks = db.query(Chunk).filter(Chunk.file_id == file_id).all()
+    # Find all chunks
+    chunks = db.query(Chunk).filter(
+        Chunk.file_id == file_uuid
+    ).all()
 
+    # Delete physical chunk files
     for chunk in chunks:
+
         if os.path.exists(chunk.chunk_path):
             os.remove(chunk.chunk_path)
 
-    # Delete from database
-    db.query(Chunk).filter(Chunk.file_id == file_id).delete()
+    # Delete chunk metadata
+    db.query(Chunk).filter(
+        Chunk.file_id == file_uuid
+    ).delete()
+
+    # Delete file metadata
     db.delete(file)
 
     db.commit()
 
-    return {"message": "File deleted successfully"}
-
+    return {
+        "message": "File deleted successfully",
+        "file_id": file_id
+    }

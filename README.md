@@ -254,6 +254,6 @@ DELETE /delete/{file_id}
 
 ## Author
 
-Mohammed Farhan Tadpatri
+Farhan
 
 GitHub: https://github.com/ffsfarhan

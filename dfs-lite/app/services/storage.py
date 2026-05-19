@@ -1,70 +1,139 @@
 import os
 import hashlib
-import random
+
+from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.node import Node
-from app.config import settings
 
-CHUNK_SIZE = 1024 * 1024  # 1MB per chunk
+CHUNK_SIZE = 1024 * 1024  # 1 MB
 
 
-def save_file_in_chunks(file_obj, file_id):
+# --------------------------------------------------
+# REAL PROJECT ROOT
+# storage.py -> services -> app -> dfs-lite
+# --------------------------------------------------
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.dirname(
+            os.path.abspath(__file__)
+        )
+    )
+)
 
-    db = SessionLocal()
+STORAGE_DIR = os.path.join(
+    BASE_DIR,
+    "storage"
+)
 
-    # Fetch online nodes dynamically from database
-    online_nodes = db.query(Node).filter(Node.is_online == True).all()
+print("BASE_DIR =", BASE_DIR)
+print("STORAGE_DIR =", STORAGE_DIR)
 
-    if len(online_nodes) < settings.REPLICATION_FACTOR:
-        db.close()
-        raise Exception("Not enough online nodes to satisfy replication factor")
 
-    total_size = 0
-    chunk_index = 0
-    chunk_metadata = []
+# --------------------------------------------------
+# SAVE FILE IN CHUNKS
+# --------------------------------------------------
+def save_file_in_chunks(file, file_id):
 
-    while True:
-        chunk_data = file_obj.read(CHUNK_SIZE)
-        if not chunk_data:
-            break
+    db: Session = SessionLocal()
 
-        total_size += len(chunk_data)
+    try:
 
-        # Calculate SHA-256 hash
-        chunk_hash = hashlib.sha256(chunk_data).hexdigest()
+        # Get ONLINE nodes from database
+        online_nodes = db.query(Node).filter(
+            Node.is_online == True
+        ).all()
 
-        # Select Node OBJECTS (not ids)
-        selected_nodes = random.sample(
-            online_nodes,
-            settings.REPLICATION_FACTOR
+        print(
+            "ONLINE NODES:",
+            [node.name for node in online_nodes]
         )
 
-        chunk_paths = []
+        # No nodes available
+        if not online_nodes:
+            raise Exception(
+                "No storage nodes online"
+            )
 
-        for node in selected_nodes:
+        total_size = 0
+        total_chunks = 0
 
-            node_path = node.path  # ✅ use stored DB path
+        chunk_metadata = []
 
-            os.makedirs(node_path, exist_ok=True)
+        chunk_index = 0
 
-            chunk_filename = f"{file_id}_chunk_{chunk_index}"
-            chunk_path = os.path.join(node_path, chunk_filename)
+        while True:
 
-            with open(chunk_path, "wb") as f:
-                f.write(chunk_data)
+            chunk_data = file.read(CHUNK_SIZE)
 
-            chunk_paths.append(chunk_path)
+            # EOF
+            if not chunk_data:
+                break
 
-        chunk_metadata.append({
-            "chunk_index": chunk_index,
-            "chunk_hash": chunk_hash,
-            "chunk_paths": chunk_paths
-        })
+            print(
+                f"\nPROCESSING CHUNK {chunk_index}"
+            )
 
-        chunk_index += 1
+            total_size += len(chunk_data)
 
-    db.close()
+            chunk_hash = hashlib.sha256(
+                chunk_data
+            ).hexdigest()
 
-    return total_size, chunk_index, chunk_metadata
+            chunk_paths = []
 
+            # Replicate ONLY to online nodes
+            for node in online_nodes:
+
+                node_path = os.path.join(
+                    STORAGE_DIR,
+                    node.name
+                )
+
+                os.makedirs(
+                    node_path,
+                    exist_ok=True
+                )
+
+                chunk_filename = (
+                    f"{file_id}_chunk_{chunk_index}"
+                )
+
+                chunk_path = os.path.join(
+                    node_path,
+                    chunk_filename
+                )
+
+                print(
+                    "WRITING TO:",
+                    chunk_path
+                )
+
+                with open(chunk_path, "wb") as f:
+                    f.write(chunk_data)
+
+                print(
+                    "WRITE SUCCESS:",
+                    os.path.exists(chunk_path)
+                )
+
+                chunk_paths.append(chunk_path)
+
+            chunk_metadata.append({
+                "chunk_index": chunk_index,
+                "chunk_hash": chunk_hash,
+                "chunk_paths": chunk_paths
+            })
+
+            total_chunks += 1
+            chunk_index += 1
+
+        return (
+            total_size,
+            total_chunks,
+            chunk_metadata
+        )
+
+    finally:
+
+        db.close()

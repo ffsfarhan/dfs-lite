@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import threading
-
+from app.services.healer import start_healer
 from app.database import engine, Base
 from app.models.file import File
 from app.models.chunk import Chunk
@@ -16,7 +16,7 @@ from app.services.node_manager import initialize_nodes
 
 
 app = FastAPI(title="DFS Lite")
-
+start_healer()
 
 # -----------------------------
 # Enable CORS for Frontend
